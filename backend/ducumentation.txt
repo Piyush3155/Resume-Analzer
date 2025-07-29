@@ -1,0 +1,7 @@
+PS D:\Projects\resume-analyzer\backend> .\venv\Scripts\activate                                                    
+>>                                                                                                                                      
+(venv) PS D:\Projects\resume-analyzer\backend> uvicorn main:app --reload --port 8000                                                    
+>>                                                                                                                                      
+INFO:     Will watch for changes in these directories: ['D:\\Projects\\resume-analyzer\\backend']
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [29532] using StatReload
