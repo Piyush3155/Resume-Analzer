@@ -1,16 +1,35 @@
-// frontend/app/page.tsx
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
+import { useDropzone } from "react-dropzone";
+import { Loader2, UploadCloud } from "lucide-react";
 
 export default function Home() {
+  const [file, setFile] = useState<File | null>(null);
   const [result, setResult] = useState<any>(null);
   const [jobDesc, setJobDesc] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const onDrop = useCallback((acceptedFiles: File[]) => {
+    setFile(acceptedFiles[0]);
+    setResult(null);
+    setError("");
+  }, []);
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: {
+      'application/pdf': [],
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': []
+    }
+  });
+
+  const handleSubmit = async () => {
+    if (!file || !jobDesc) {
+      setError("❗ Please provide both a resume and a job description.");
+      return;
+    }
 
     const formData = new FormData();
     formData.append("file", file);
@@ -18,6 +37,7 @@ export default function Home() {
 
     setLoading(true);
     setResult(null);
+    setError("");
 
     try {
       const res = await fetch("http://localhost:8000/analyze", {
@@ -25,75 +45,136 @@ export default function Home() {
         body: formData,
       });
 
-      if (!res.ok) {
-        console.error("Failed to analyze resume:", res.statusText);
-        return;
-      }
+      if (!res.ok) throw new Error("Analysis failed");
 
       const data = await res.json();
-      setResult(data);
+      setResult({
+        skills: [],
+        education: [],
+        experience: [],
+        ...data,
+      });
     } catch (err) {
-      console.error("Upload error:", err);
+      console.error(err);
+      setError("❌ Upload or analysis error.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="p-8 space-y-4 max-w-2xl mx-auto">
-      <h1 className="text-3xl font-bold mb-4">🧠 AI Resume Analyzer</h1>
+    <div className="p-6 max-w-3xl mx-auto space-y-6">
+      <h1 className="text-4xl font-bold text-center">🧠 AI Resume Analyzer</h1>
 
       <textarea
-        rows={6}
-        placeholder="Paste Job Description here..."
-        className="w-full p-2 border rounded"
+        rows={5}
+        placeholder="Paste job description here..."
+        className="w-full p-3 border rounded-md border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-400"
         value={jobDesc}
         onChange={(e) => setJobDesc(e.target.value)}
+        disabled={loading}
       />
 
-      <label className="block border-2 border-dashed border-gray-400 p-6 rounded-lg text-center cursor-pointer hover:border-blue-500 transition">
-        <input
-          type="file"
-          accept=".pdf,.docx"
-          className="hidden"
-          onChange={handleFileChange}
-        />
-        <p>📎 Click or drag your resume file here</p>
-        <p className="text-sm text-gray-500">Supported: .pdf, .docx</p>
-      </label>
+      <div
+        {...getRootProps()}
+        className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition ${
+          isDragActive ? "border-blue-500" : "border-gray-400"
+        } ${loading ? "opacity-50" : ""}`}
+      >
+        <input {...getInputProps()} disabled={loading} />
+        <div className="flex flex-col items-center space-y-2">
+          <UploadCloud className="w-8 h-8 text-gray-600" />
+          <p className="text-lg font-medium">
+            {file ? file.name : "Drag & drop or click to upload your resume"}
+          </p>
+          <p className="text-sm text-gray-500">Supported: .pdf, .docx</p>
+        </div>
+      </div>
 
-      {loading && (
-        <div className="mt-4 text-blue-500 animate-pulse">Analyzing...</div>
-      )}
+      <button
+        onClick={handleSubmit}
+        disabled={loading || !file}
+        className="bg-blue-600 text-white font-semibold px-6 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
+      >
+        {loading ? (
+          <span className="flex items-center gap-2">
+            <Loader2 className="w-4 h-4 animate-spin" /> Analyzing...
+          </span>
+        ) : (
+          "Submit"
+        )}
+      </button>
+
+      {error && <div className="text-red-600 text-center text-sm">{error}</div>}
 
       {result && (
-        <div className="mt-6 bg-gray-100 text-black p-4 rounded shadow space-y-4">
+        <div className="bg-white rounded-lg shadow-md p-6 space-y-4">
+          <h2 className="text-xl font-bold text-blue-700">Summary</h2>
+          <p className="text-gray-800">{result.summary}</p>
+
           <div>
-            <h2 className="text-xl font-bold text-blue-700 mb-2">Summary:</h2>
-            <p>{result.summary}</p>
+            <h3 className="font-semibold text-green-700">Top Skills</h3>
+            {Array.isArray(result.skills) && result.skills.length > 0 ? (
+              <ul className="list-disc list-inside text-sm">
+                {result.skills.map((skill: string, idx: number) => (
+                  <li key={idx}>{skill}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-gray-500">No skills detected.</p>
+            )}
           </div>
 
           <div>
-            <h3 className="font-semibold text-green-700">Top Skills:</h3>
-            <ul className="list-disc list-inside">
-              {result.skills.map((skill: string, idx: number) => (
-                <li key={idx}>{skill}</li>
-              ))}
-            </ul>
+            <h3 className="font-semibold text-blue-700">Education</h3>
+            {Array.isArray(result.education) && result.education.length > 0 ? (
+              <ul className="list-disc list-inside text-sm">
+                {result.education.map((edu: string, idx: number) => (
+                  <li key={idx}>{edu}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-gray-500">No education found.</p>
+            )}
           </div>
 
           <div>
-            <h3 className="font-semibold text-purple-700">Full Resume Text:</h3>
-            <pre className="bg-white border p-4 rounded max-h-[300px] overflow-y-auto text-sm whitespace-pre-wrap">
+            <h3 className="font-semibold text-indigo-700">Experience</h3>
+            {Array.isArray(result.experience) && result.experience.length > 0 ? (
+              <ul className="list-disc list-inside text-sm">
+                {result.experience.map((exp: string, idx: number) => (
+                  <li key={idx}>{exp}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-gray-500">No experience found.</p>
+            )}
+          </div>
+
+          <div>
+            <h3 className="font-semibold text-purple-700 mb-1">Full Resume Text</h3>
+            <pre className="bg-gray-100 border p-3 rounded max-h-64 overflow-y-auto text-sm whitespace-pre-wrap">
               {result.text}
             </pre>
           </div>
 
-          {result.score !== null && (
-            <div className="text-green-600 font-bold text-lg">
-              Match Score: {result.score}%
-            </div>
-          )}
+          <div className="space-y-1">
+            <h3 className="text-lg font-bold text-green-600">
+              ATS Match Score: {result.ats_score ?? result.score ?? 0}%
+            </h3>
+            <p className="text-sm">
+              📊 <strong>TF-IDF Score:</strong> {result.score ?? 0}%
+            </p>
+            <p className="text-sm">
+              🔍 <strong>Keyword Match:</strong> {result.keyword_match_score ?? 0}%
+            </p>
+            <p className="text-sm">
+              🧩 <strong>Section Bonus:</strong> {result.section_bonus ?? 0} pts
+            </p>
+            {result.suggestion && (
+              <p className="text-yellow-700 font-semibold">{result.suggestion}</p>
+            )}
+          </div>
         </div>
       )}
     </div>
